@@ -27,25 +27,39 @@ from twisted.internet.protocol import ClientFactory
 from twisted.conch.telnet import TelnetTransport, TelnetProtocol
 import argparse
 import sys
+import time
 
 class TelnetPDUControl(TelnetProtocol):
 
     def dataReceived(self, bytes_rx):
-        self.rx += bytes_rx
-        if self.rx.rstrip()[-1] == "-":
-            reactor.stop()
-
-        if self.sent_cmd:
+        bytes_rx = bytes_rx.rstrip()
+        if not len(bytes_rx):
+            # Don't respond to empty input
             return
 
-        self.sent_cmd = True
-        print self.cmd
-        self.transport.write(self.cmd)
+        print bytes_rx
+        if bytes_rx[-1] == "-":
+            self.cmd_index += 1
+            if self.cmd_index == len(self.cmds):
+                # end of command list
+                reactor.stop()
+            else:
+                # Next command
+                time.sleep(1)
+                self.sent_cmd = False
 
-    def __init__(self, cmd):
+        if self.sent_cmd:
+            # Don't re-send commands...
+            return
+
+        # If we are here, we haven't sent the current command, so send it.
+        self.sent_cmd = True
+        self.transport.write(self.cmds[self.cmd_index])
+
+    def __init__(self, cmds):
         self.sent_cmd = False
-        self.rx = ""
-        self.cmd = cmd
+        self.cmds = cmds
+        self.cmd_index = 0
 
     def connectionMade(self):
         pass
@@ -57,12 +71,14 @@ class TelnetFactory(ClientFactory):
     def buildProtocol(self, addr):
         return TelnetTransport(TelnetPDUControl, self.cmd)
 
+
 parser = argparse.ArgumentParser("Send command to Arduino PDU.")
 parser.add_argument("server",
                     help="Server to telnet to in order to access the PDU.")
 parser.add_argument("port",
                     help="Port to telnet to in order to access the PDU.",
-                    default=23)
+                    default=23,
+                    type=int)
 parser.add_argument("--index",
                     required=True,
                     help="Index on PDU of port to control.")
@@ -72,26 +88,31 @@ parser.add_argument("--on",
 parser.add_argument("--off",
                     action="store_true",
                     help="Turn off power.")
+parser.add_argument("--reboot",
+                    action="store_true",
+                    help="Turn toggle power off then back on.")
 
 args = parser.parse_args()
 
-if args.on == args.off:
+if args.on == args.off and not args.reboot:
     # If both on and off or neither on or off have been specified, this is an
     # error.
     print >> sys.stderr, "Error: Please specify --on XOR --off."
     exit(1)
 
-cmd = "p" + args.index + "v"
+prefix = "p" + args.index + "v"
+cmds = []
 
 if args.on:
-    cmd += "1"
+    cmds.append(prefix + "1")
 elif args.off:
-    cmd += "0"
+    cmds.append(prefix + "0")
+elif args.reboot:
+    cmds.append(prefix + "0")
+    cmds.append(prefix + "1")
 else:
     args.print_help()
     exit(1)
 
-print cmd
-
-reactor.connectTCP("192.168.1.10", 2000, TelnetFactory(cmd))
+reactor.connectTCP(args.server, args.port, TelnetFactory(cmds))
 reactor.run()
