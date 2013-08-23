@@ -91,10 +91,13 @@ parser.add_argument("--off",
 parser.add_argument("--reboot",
                     action="store_true",
                     help="Turn toggle power off then back on.")
+parser.add_argument("--ping",
+                    action="store_true",
+                    help="Turn toggle power on then back off.")
 
 args = parser.parse_args()
 
-if args.on == args.off and not args.reboot:
+if args.on == args.off and not (args.reboot or args.ping):
     # If both on and off or neither on or off have been specified, this is an
     # error.
     print >> sys.stderr, "Error: Please specify --on XOR --off."
@@ -110,6 +113,9 @@ elif args.off:
 elif args.reboot:
     cmds.append(prefix + "0")
     cmds.append(prefix + "1")
+elif args.ping:
+    cmds.append(prefix + "1")
+    cmds.append(prefix + "0")
 else:
     args.print_help()
     exit(1)
