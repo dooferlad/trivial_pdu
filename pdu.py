@@ -23,11 +23,13 @@ Why am I using twisted? Because I am playing. No other technical decision!
 """
 
 from twisted.internet import reactor
-from twisted.internet.protocol import ClientFactory
+from twisted.internet.protocol import ReconnectingClientFactory
 from twisted.conch.telnet import TelnetTransport, TelnetProtocol
 import argparse
 import sys
 import time
+
+max_index = 7
 
 class TelnetPDUControl(TelnetProtocol):
 
@@ -64,7 +66,8 @@ class TelnetPDUControl(TelnetProtocol):
     def connectionMade(self):
         pass
 
-class TelnetFactory(ClientFactory):
+
+class TelnetFactory(ReconnectingClientFactory):
     def __init__(self, cmd):
         self.cmd = cmd
 
@@ -103,22 +106,36 @@ if args.on == args.off and not (args.reboot or args.ping):
     print >> sys.stderr, "Error: Please specify --on XOR --off."
     exit(1)
 
-prefix = "p" + args.index + "v"
+try:
+    indices = [int(args.index)]
+except ValueError:
+    if args.index == "all":
+        indices = range(0, max_index+1)
+    else:
+        print >> sys.stderr, "Error: Please specify an index less than",\
+            max_index + 1, 'or "all".'
+        exit(1)
+
 cmds = []
 
-if args.on:
-    cmds.append(prefix + "1")
-elif args.off:
-    cmds.append(prefix + "0")
-elif args.reboot:
-    cmds.append(prefix + "0")
-    cmds.append(prefix + "1")
-elif args.ping:
-    cmds.append(prefix + "1")
-    cmds.append(prefix + "0")
-else:
-    args.print_help()
-    exit(1)
+for index in indices:
+    prefix = "p" + str(index) + "v"
+    
+    if args.on:
+        cmds.append(prefix + "1")
+    elif args.off:
+        cmds.append(prefix + "0")
+    elif args.reboot:
+        cmds.append(prefix + "0")
+        cmds.append(prefix + "1")
+    elif args.ping:
+        cmds.append(prefix + "1")
+        cmds.append(prefix + "0")
+    else:
+        args.print_help()
+        exit(1)
+
+print cmds
 
 reactor.connectTCP(args.server, args.port, TelnetFactory(cmds))
 reactor.run()
