@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 # This file is part of Aduino PDU.
 # 
@@ -39,8 +39,9 @@ class TelnetPDUControl(TelnetProtocol):
             # Don't respond to empty input
             return
 
-        print bytes_rx
-        if bytes_rx[-1] == "-":
+        print(bytes_rx)
+        print(self.cmds[self.cmd_index], "?", self.cmd_index)
+        if bytes_rx.decode("ascii", "ignore")[-1] == "-":
             self.cmd_index += 1
             if self.cmd_index == len(self.cmds):
                 # end of command list
@@ -52,11 +53,12 @@ class TelnetPDUControl(TelnetProtocol):
 
         if self.sent_cmd:
             # Don't re-send commands...
+            print("...")
             return
 
         # If we are here, we haven't sent the current command, so send it.
         self.sent_cmd = True
-        self.transport.write(self.cmds[self.cmd_index])
+        self.transport.write(self.cmds[self.cmd_index].encode('ascii'))
 
     def __init__(self, cmds):
         self.sent_cmd = False
@@ -103,17 +105,17 @@ args = parser.parse_args()
 if args.on == args.off and not (args.reboot or args.ping):
     # If both on and off or neither on or off have been specified, this is an
     # error.
-    print >> sys.stderr, "Error: Please specify --on XOR --off."
+    print("Error: Please specify --on XOR --off.", file=sys.stderr)
     exit(1)
 
 try:
     indices = [int(args.index)]
 except ValueError:
     if args.index == "all":
-        indices = range(0, max_index+1)
+        indices = list(range(0, max_index+1))
     else:
-        print >> sys.stderr, "Error: Please specify an index less than",\
-            max_index + 1, 'or "all".'
+        print("Error: Please specify an index less than",\
+            max_index + 1, 'or "all".', file=sys.stderr)
         exit(1)
 
 cmds = []
@@ -135,7 +137,7 @@ for index in indices:
         args.print_help()
         exit(1)
 
-print cmds
+print(cmds)
 
 reactor.connectTCP(args.server, args.port, TelnetFactory(cmds))
 reactor.run()
